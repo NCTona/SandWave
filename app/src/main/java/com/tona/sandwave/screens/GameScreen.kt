@@ -1,4 +1,4 @@
-package com.tona.sandwave.ui
+package com.tona.sandwave.screens
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import com.tona.sandwave.engine.GameEngine
@@ -59,17 +60,6 @@ fun GameScreen(
                 val length = 300f
                 val radius = 30f
 
-                // Sóng cát
-                for (x in 0..size.width.toInt() step 10) {
-                    val y = size.height / 2 + amplitude * sin((x + eng.waveOffset)/length)
-                    drawLine(
-                        color = Color(0xFFFFD700),
-                        start = Offset(x.toFloat(), size.height),
-                        end = Offset(x.toFloat(), y),
-                        strokeWidth = 4f
-                    )
-                }
-
                 // Obstacles: đáy chạm sóng
                 eng.state.obstacles.forEach { obs ->
                     val obsY = size.height / 2 + amplitude * sin((obs.x + eng.waveOffset)/length)
@@ -77,9 +67,33 @@ fun GameScreen(
                     drawRect(
                         color = Color.Black,
                         topLeft = Offset(obs.x, topY),
-                        size = Size(obs.width, obs.height)
+                        size = Size(obs.width, obs.height + 10f)
                     )
                 }
+
+                // Sóng cát
+                drawPath(
+                    path = Path().apply {
+                        moveTo(0f, size.height) // góc trái dưới
+
+                        // vẽ sóng đến gần cuối màn hình
+                        for (x in 0..size.width.toInt() step 10) {
+                            val y = size.height / 2 + amplitude * sin((x + eng.waveOffset)/length)
+                            lineTo(x.toFloat(), y)
+                        }
+
+                        // ép thêm 1 điểm chính xác tại mép phải
+                        val lastY = size.height / 2 + amplitude * sin((size.width + eng.waveOffset)/length)
+                        lineTo(size.width, lastY)
+
+                        // đóng path về đáy phải
+                        lineTo(size.width, size.height)
+                        close()
+                    },
+                    color = Color(0xFFFFD700)
+                )
+
+
 
                 // Player lướt trên sóng
                 drawCircle(
@@ -99,7 +113,7 @@ fun GameScreen(
                 onGameOver()
                 break
             }
-            delay(16) // ~60FPS
+            delay(8) // ~60FPS
         }
     }
 }

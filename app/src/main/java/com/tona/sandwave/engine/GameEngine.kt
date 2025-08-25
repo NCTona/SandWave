@@ -7,7 +7,6 @@ import com.tona.sandwave.model.GameState
 import com.tona.sandwave.model.Obstacle
 import kotlin.math.sin
 import kotlin.random.Random
-import kotlin.system.*
 
 class GameEngine(val canvasWidth: Float, val canvasHeight: Float) {
 
@@ -17,12 +16,16 @@ class GameEngine(val canvasWidth: Float, val canvasHeight: Float) {
 
     private val amplitude = 100f
     private val waveLength = 300f
-    private val obstacleSpeed = 5f
+    private val obstacleSpeed = 3.5f
     private val playerRadius = 30f
-    private val gravity = 0.5f   // giảm gravity → nhảy lơ lửng lâu hơn
-    private val jumpVelocity = 20f // tăng tốc ban đầu → nhảy cao hơn
+    private val gravity = 0.4f
+    private val jumpVelocity = 15f
 
     private var lastTime = System.nanoTime()
+
+    // spawn control
+    private var lastSpawnTime = System.currentTimeMillis()
+    private var nextSpawnDelay = Random.nextLong(3000, 5000) // ms
 
     init {
         state.reset()
@@ -31,16 +34,23 @@ class GameEngine(val canvasWidth: Float, val canvasHeight: Float) {
     fun update() {
         if (isGameOver) return
 
+        // deltaTime để vật lý mượt hơn
         val currentTime = System.nanoTime()
-        val deltaTime = (currentTime - lastTime) / 1_000_000_000f // giây
+        val deltaTime = (currentTime - lastTime) / 1_000_000_000f
         lastTime = currentTime
 
-        // Sóng trôi về phía player
+        // cập nhật sóng
         waveOffset += obstacleSpeed
 
-        // Update player
+        updatePlayer(deltaTime)
+        updateObstacles()
+        maybeSpawnObstacle()
+        checkCollisions()
+    }
+
+    private fun updatePlayer(deltaTime: Float) {
         val player = state.player
-        val baseY = canvasHeight / 2 + amplitude * sin((player.x + waveOffset)/waveLength)
+        val baseY = canvasHeight / 2 + amplitude * sin((player.x + waveOffset) / waveLength)
 
         if (player.isJumping) {
             player.y -= player.velocityY * deltaTime * 60f
@@ -53,37 +63,46 @@ class GameEngine(val canvasWidth: Float, val canvasHeight: Float) {
         } else {
             player.y = baseY - playerRadius
         }
+    }
 
-        // Update obstacles
+    private fun updateObstacles() {
+        // di chuyển sang trái
         state.obstacles.forEach { it.x -= obstacleSpeed }
+        // xoá những obstacle đã ra ngoài
+        state.obstacles.removeAll { it.x + it.width < 0 }
+    }
 
-        // Remove off-screen obstacles & spawn new
-        if (state.obstacles.isNotEmpty() && state.obstacles.first().x + state.obstacles.first().width < 0) {
-            state.obstacles.removeAt(0)
+    private fun maybeSpawnObstacle() {
+        val now = System.currentTimeMillis()
+        if (now - lastSpawnTime > nextSpawnDelay) {
             state.obstacles.add(
                 Obstacle(
-                    x = canvasWidth + Random.nextInt(100, 300),
+                    x = canvasWidth + Random.nextInt(5000, 10000),
                     width = 40f,
                     height = 40f + Random.nextFloat() * 60f
                 )
             )
+            lastSpawnTime = now
+            nextSpawnDelay = Random.nextLong(3000, 5000) // random lại
         }
+    }
 
-        // Collision detection nếu obstacles tồn tại
-        if (state.obstacles.isNotEmpty()) {
-            state.obstacles.forEach { obs ->
-                val obsY = canvasHeight / 2 + amplitude * sin((obs.x + waveOffset)/waveLength)
-                val obsTop = obsY - obs.height
-                val obsBottom = obsY
-                val playerTop = player.y - playerRadius
-                val playerBottom = player.y + playerRadius
+    private fun checkCollisions() {
+        val player = state.player
+        val playerTop = player.y - playerRadius
+        val playerBottom = player.y + playerRadius
 
-                if (player.x + playerRadius > obs.x && player.x - playerRadius < obs.x + obs.width &&
-                    playerBottom > obsTop && playerTop < obsBottom
-                ) {
-                    isGameOver = true
-                    state.isGameOver = true
-                }
+        state.obstacles.forEach { obs ->
+            val obsY = canvasHeight / 2 + amplitude * sin((obs.x + waveOffset) / waveLength)
+            val obsTop = obsY - obs.height
+            val obsBottom = obsY
+
+            if (player.x + playerRadius > obs.x &&
+                player.x - playerRadius < obs.x + obs.width &&
+                playerBottom > obsTop && playerTop < obsBottom
+            ) {
+                isGameOver = true
+                state.isGameOver = true
             }
         }
     }
