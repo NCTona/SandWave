@@ -1,5 +1,6 @@
 package com.tona.sandwave.screens
 
+import android.util.Log
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -24,6 +25,7 @@ fun GameScreen(
     key: Int,
     onPause: () -> Unit,
     onGameOver: () -> Unit,
+    onPlayAgain: () -> Unit,
     isPaused: Boolean,
 ) {
     var engine by remember { mutableStateOf<GameEngine?>(null) }
@@ -162,5 +164,7 @@ fun GameScreen(
     // Reset game
     LaunchedEffect(key) {
         engine?.reset()
+        delay(20)
+        onPlayAgain()
     }
 }

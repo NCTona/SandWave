@@ -29,6 +29,7 @@ fun App() {
             key = reset,
             onPause = { showPause.value = true },
             onGameOver = { showGameOver.value = true },
+            onPlayAgain = { showGameOver.value = false },
             isPaused = showPause.value || showMenu.value || showGameOver.value
         )
 
@@ -75,7 +76,7 @@ fun App() {
             ) {
                 GameOverScreen(
                     onPlayAgain = {
-                        Log.d("GameEngine", showGameOver.value.toString())
+                        reset += 1
                         showGameOver.value = false
                         reset += 1
                     },
