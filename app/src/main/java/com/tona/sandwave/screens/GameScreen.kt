@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.scale
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.tona.sandwave.engine.GameEngine
 import kotlinx.coroutines.delay
@@ -29,6 +30,7 @@ fun GameScreen(
     isPaused: Boolean,
 ) {
     var engine by remember { mutableStateOf<GameEngine?>(null) }
+    val context = LocalContext.current
 
     // Biến lưu scale hiện tại và thời điểm player nhảy cao
     var scale by remember { mutableStateOf(1f) }
@@ -65,7 +67,7 @@ fun GameScreen(
         }
 
         Canvas(modifier = Modifier.fillMaxSize()) {
-            if (engine == null) engine = GameEngine(size.width, size.height)
+            if (engine == null) engine = GameEngine(size.width, size.height, context)
 
             engine?.let { eng ->
                 val playerRadius = 30f

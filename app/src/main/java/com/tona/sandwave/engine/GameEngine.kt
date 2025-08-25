@@ -9,10 +9,13 @@ import com.tona.sandwave.model.Obstacle
 import kotlin.math.PI
 import kotlin.math.sin
 import kotlin.random.Random
+import android.content.Context
+import androidx.compose.ui.platform.LocalContext
 
-class GameEngine(val canvasWidth: Float, val canvasHeight: Float) {
+class GameEngine(val canvasWidth: Float, val canvasHeight: Float, context: Context) {
 
     val state = GameState()
+    val sound = Sound(context = context)
 
     // offset "kéo" sóng sang trái (mặt đất chuyển động)
     var waveOffset by mutableStateOf(0f)
@@ -141,6 +144,7 @@ class GameEngine(val canvasWidth: Float, val canvasHeight: Float) {
             state.player.velocityY = jumpVelocity
             state.player.isJumping = true
         }
+        sound.playJumpSound()
     }
 
     fun playerFly(){
@@ -201,6 +205,7 @@ class GameEngine(val canvasWidth: Float, val canvasHeight: Float) {
                 player.x - playerRadius < obs.x + obs.width &&
                 playerBottom > obsTop && playerTop < obsBottom
             ) {
+                sound.playCrashSound()
                 state.isGameOver = true
             }
         }
