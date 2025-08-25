@@ -13,30 +13,42 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.scale
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import com.tona.sandwave.engine.GameEngine
 import kotlinx.coroutines.delay
-import kotlin.math.sin
 
 @Composable
 fun GameScreen(
+    key: Int,
     onPause: () -> Unit,
-    onGameOver: () -> Unit
+    onGameOver: () -> Unit,
+    isPaused: Boolean,
 ) {
     var engine by remember { mutableStateOf<GameEngine?>(null) }
+
+    // Biến lưu scale hiện tại và thời điểm player nhảy cao
+    var scale by remember { mutableStateOf(1f) }
+    var lastHighJumpTime by remember { mutableStateOf(0L) }
 
     Box(
         Modifier
             .fillMaxSize()
-            .background(Color(0xFF87CEEB))
+            .background(Color(0xFFACE4EF))
             .pointerInput(Unit) {
-                detectTapGestures(onTap = {
-                    engine?.playerJump()
-                })
+                detectTapGestures(
+                    onPress = {
+                        engine?.isHolding = true
+                        engine?.playerFly()
+                        tryAwaitRelease()
+                        engine?.isHolding = false
+                    },
+                    onTap = { engine?.playerJump() }
+                )
             }
     ) {
-        // Nút Pause góc trên phải
+        // Nút Pause
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -51,69 +63,104 @@ fun GameScreen(
         }
 
         Canvas(modifier = Modifier.fillMaxSize()) {
-            if (engine == null) {
-                engine = GameEngine(size.width, size.height)
-            }
+            if (engine == null) engine = GameEngine(size.width, size.height)
 
             engine?.let { eng ->
-                val amplitude = 100f
-                val length = 300f
-                val radius = 30f
+                val playerRadius = 30f
+                val paddingTop = size.height * 0.2f // khoảng cách tham chiếu
+                val scaleDuration = 5000L // giữ scale tối đa trong 5s
+                val scaleSpeed = 0.0005f   // tốc độ tăng dần về 1 mỗi frame
 
-                // Obstacles: đáy chạm sóng
-                eng.state.obstacles.forEach { obs ->
-                    val obsY = size.height / 2 + amplitude * sin((obs.x + eng.waveOffset)/length)
-                    val topY = obsY - obs.height
-                    drawRect(
-                        color = Color.Black,
-                        topLeft = Offset(obs.x, topY),
-                        size = Size(obs.width, obs.height + 10f)
-                    )
+                val playerTop = eng.state.player.y - playerRadius + 50f
+                val targetScale = if (playerTop < paddingTop) {
+                    (playerTop + 1000f) / (paddingTop + 1000f)
+                } else 1f
+
+                // xử lý khi player nhảy cao
+                if (targetScale < 1f) {
+                    lastHighJumpTime = System.currentTimeMillis()
+                    if (scale > targetScale) {
+                        // scale hiện tại lớn hơn targetScale -> giảm xuống targetScale
+                        scale = targetScale
+                    }
+                    // nếu targetScale > scale hiện tại -> giữ scale hiện tại
                 }
 
-                // Sóng cát
-                drawPath(
-                    path = Path().apply {
-                        moveTo(0f, size.height) // góc trái dưới
+                // nếu đã hết 5s kể từ nhảy cao -> tăng dần về 1
+                if (System.currentTimeMillis() - lastHighJumpTime > scaleDuration) {
+                    if (scale < 1f) {
+                        scale += scaleSpeed
+                        if (scale > 1f) scale = 1f
+                    }
+                }
 
-                        // vẽ sóng đến gần cuối màn hình
-                        for (x in 0..size.width.toInt() step 10) {
-                            val y = size.height / 2 + amplitude * sin((x + eng.waveOffset)/length)
-                            lineTo(x.toFloat(), y)
-                        }
+                // áp dụng scale đồng nhất quanh trung tâm màn hình
+                with(drawContext.canvas) {
+                    save()
+                    val pivotX = size.width / 2f
+                    val pivotY = size.height / 2f
+                    scale(scale, scale, pivotX, pivotY)
 
-                        // ép thêm 1 điểm chính xác tại mép phải
-                        val lastY = size.height / 2 + amplitude * sin((size.width + eng.waveOffset)/length)
-                        lineTo(size.width, lastY)
+                    // vẽ obstacles
+                    eng.state.obstacles.forEach { obs ->
+                        drawRect(
+                            color = Color.Black,
+                            topLeft = Offset(obs.x, obs.y),
+                            size = Size(obs.width, obs.height + 20f)
+                        )
+                    }
 
-                        // đóng path về đáy phải
-                        lineTo(size.width, size.height)
-                        close()
-                    },
-                    color = Color(0xFFFFD700)
-                )
+                    // vẽ sóng
+                    drawPath(
+                        path = Path().apply {
+                            val extendedWidth = size.width / scale + 200f
+                            val extendedHeight = size.height / scale + 200f
 
+                            moveTo(-400f, extendedHeight)
+                            var sx = -400f
+                            val step = 6f
+                            while (sx <= extendedWidth) {
+                                val worldX = sx + eng.waveOffset
+                                val y = eng.getWaveHeightAt(worldX)
+                                lineTo(sx, y)
+                                sx += step
+                            }
+                            lineTo(extendedWidth, extendedHeight)
+                            close()
+                        },
+                        color = Color(0xFFF1B42E)
+                    )
 
+                    // vẽ player
+                    drawCircle(
+                        color = Color.Black,
+                        radius = playerRadius,
+                        center = Offset(eng.state.player.x, eng.state.player.y)
+                    )
 
-                // Player lướt trên sóng
-                drawCircle(
-                    color = Color.Red,
-                    radius = radius,
-                    center = Offset(eng.state.player.x, eng.state.player.y)
-                )
+                    restore()
+                }
             }
         }
     }
 
     // Vòng lặp update game
-    LaunchedEffect(engine) {
+    LaunchedEffect(engine, isPaused, key) {
         while (true) {
-            engine?.update()
-            if (engine?.isGameOver == true) {
-                onGameOver()
-                break
+            if (!isPaused) {
+                engine?.update()
+                if (engine?.state?.isGameOver  == true) {
+                    onGameOver()
+                    engine?.state?.isGameOver  = false
+                    break
+                }
             }
             delay(8) // ~60FPS
         }
+    }
+
+    // Reset game
+    LaunchedEffect(key) {
+        engine?.reset()
     }
 }

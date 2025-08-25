@@ -1,14 +1,16 @@
 package com.tona.sandwave.model
 
-import kotlin.random.Random
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 
 class GameState {
     var player = Player()
     var obstacles = mutableListOf<Obstacle>()
-    var isGameOver = false
+    var isGameOver by mutableStateOf(false)
 
     fun reset() {
-        player = Player(x = 120f, y = 0f, velocityY = 0f, isJumping = false)
+        player = Player(x = 240f, y = 0f, velocityY = 0f, isJumping = false)
         obstacles.clear()
         isGameOver = false
     }
