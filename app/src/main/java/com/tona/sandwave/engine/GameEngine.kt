@@ -1,6 +1,5 @@
 package com.tona.sandwave.engine
 
-import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -10,7 +9,7 @@ import kotlin.math.PI
 import kotlin.math.sin
 import kotlin.random.Random
 import android.content.Context
-import androidx.compose.ui.platform.LocalContext
+import android.util.Log
 
 class GameEngine(val canvasWidth: Float, val canvasHeight: Float, context: Context) {
 
@@ -22,10 +21,10 @@ class GameEngine(val canvasWidth: Float, val canvasHeight: Float, context: Conte
 
     var isHolding by mutableStateOf(false) // nhấn giữ
 
-    private val obstacleSpeedNormal = 3.5f
-    private val obstacleSpeedBoost = 8f
-    private val gravityNormal = 0.4f
-    private val gravityReduced = 0.2f
+    private var obstacleSpeedNormal = 4f
+    private var obstacleSpeedBoosted = 8f
+    private var gravityNormal = 0.4f
+    private var gravityReduced = 0.2f
 
     private var obstacleSpeed = 3.5f
     private val playerRadius = 30f
@@ -43,7 +42,7 @@ class GameEngine(val canvasWidth: Float, val canvasHeight: Float, context: Conte
     // =========================
 
     // Sóng nền (baseline) – thay đổi rất chậm để độ sâu thung lũng khác nhau
-    private val baseY = canvasHeight / 2f
+    private val baseY = canvasHeight / 1.5f
     private val baselineAmp = Random.nextFloat() * 40f + 30f                 // 30..70
     private val baselineLambda = canvasWidth * (Random.nextFloat() + 2.5f)   // ~ 2.5..3.5 màn hình
     private val baselinePhase = Random.nextFloat() * (2 * PI).toFloat()
@@ -62,8 +61,8 @@ class GameEngine(val canvasWidth: Float, val canvasHeight: Float, context: Conte
     private val subLambda2 = mainLambda * (0.33f + Random.nextFloat() * 0.20f) // ~0.33..0.53 của main
     private val subPhase2 = Random.nextFloat() * (2 * PI).toFloat()
 
-    private val minWaveY = canvasHeight * 0.45f   // sâu nhất
-    private val maxWaveY = canvasHeight * 0.65f   // cao nhất
+    private val minWaveY = canvasHeight * 0.40f   // sâu nhất
+    private val maxWaveY = canvasHeight * 0.70f   // cao nhất
 
     init {
         state.reset()
@@ -73,12 +72,22 @@ class GameEngine(val canvasWidth: Float, val canvasHeight: Float, context: Conte
     fun update() {
         if (state.isGameOver) return
 
+        Log.d("GameEngine", gravity.toString())
+//        Log.d("GameEngine", obstacleSpeed.toString())
+
+        obstacleSpeed = (obstacleSpeed + 0.0005f).coerceAtMost(10f)
+        obstacleSpeedNormal = (obstacleSpeedNormal + 0.0005f).coerceAtMost(10f)
+        obstacleSpeedBoosted = (obstacleSpeedBoosted + 0.0005f).coerceAtMost(16f)
+
         val currentTime = System.nanoTime()
         val deltaTime = (currentTime - lastTime) / 1_000_000_000f
         lastTime = currentTime
 
         if (!isHolding || !state.player.isJumping) obstacleSpeed = obstacleSpeedNormal
-        if (!isHolding || !state.player.isJumping) gravity = gravityNormal
+        if (!isHolding && !state.player.isJumping) gravity = gravityNormal
+
+        // Gọi giảm gravity khi đang hold
+        playerAccumulate()
 
         // Sóng "chảy" qua người chơi
         waveOffset += obstacleSpeed
@@ -92,6 +101,9 @@ class GameEngine(val canvasWidth: Float, val canvasHeight: Float, context: Conte
     fun reset (){
         state.reset()
         waveOffset = 0f
+        obstacleSpeedNormal = 4f
+        obstacleSpeedBoosted = 8f
+        obstacleSpeed = 3.5f
         updatePlayer((System.nanoTime() - lastTime) / 1_000_000_000f)
     }
 
@@ -143,13 +155,20 @@ class GameEngine(val canvasWidth: Float, val canvasHeight: Float, context: Conte
         if (!state.player.isJumping) {
             state.player.velocityY = jumpVelocity
             state.player.isJumping = true
+            sound.playJumpSound()
         }
-        sound.playJumpSound()
     }
 
-    fun playerFly(){
-        obstacleSpeed = if (state.player.isJumping && isHolding) obstacleSpeedBoost else obstacleSpeedNormal
-        gravity = if (state.player.isJumping && isHolding) gravityReduced else gravityNormal
+    fun playerAccumulate(){
+        if (!state.player.isJumping && isHolding) {
+            // Khi đang hold, giảm gravity dần dần
+            gravity = (gravity - 0.002f).coerceAtLeast(gravityReduced)
+        }
+    }
+
+    fun playerBoost(){
+        obstacleSpeed = if (state.player.isJumping && isHolding) obstacleSpeedBoosted else obstacleSpeedNormal
+//        gravity = if (state.player.isJumping && isHolding) gravityReduced else gravityNormal
     }
 
     // =========================
@@ -172,14 +191,14 @@ class GameEngine(val canvasWidth: Float, val canvasHeight: Float, context: Conte
         val now = System.currentTimeMillis()
         if (now - lastSpawnTime > nextSpawnDelay) {
             // Chọn vị trí spawn theo toạ độ thế giới rồi quy về toạ độ màn hình
-            val spawnWorldX = waveOffset + canvasWidth + Random.nextInt(300, 600)
+            val spawnWorldX = waveOffset + canvasWidth + Random.nextInt(300, 600) + 500
             val waveY = waveAt(spawnWorldX)
-            val obsHeight = 40f + Random.nextFloat() * 60f
+            val obsHeight = 50f + Random.nextFloat() * 100f
 
             state.obstacles.add(
                 Obstacle(
                     x = spawnWorldX - waveOffset,  // lưu theo toạ độ màn hình
-                    y = waveY - obsHeight,         // đáy obstacle chạm sóng
+                    y = waveY - obsHeight - 20f,         // đáy obstacle chạm sóng
                     width = 40f,
                     height = obsHeight
                 )

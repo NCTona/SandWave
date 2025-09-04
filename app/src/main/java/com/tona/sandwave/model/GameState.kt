@@ -10,7 +10,7 @@ class GameState {
     var isGameOver by mutableStateOf(false)
 
     fun reset() {
-        player = Player(x = 240f, y = 0f, velocityY = 0f, isJumping = false)
+        player = Player(x = 360f, y = 0f, velocityY = 0f, isJumping = false)
         obstacles.clear()
         isGameOver = false
     }

@@ -1,11 +1,12 @@
 package com.tona.sandwave.screens
 
-import android.util.Log
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -16,10 +17,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.scale
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import com.tona.sandwave.R
 import com.tona.sandwave.engine.GameEngine
+import com.tona.sandwave.thread.GameThread
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 
 @Composable
 fun GameScreen(
@@ -28,7 +35,13 @@ fun GameScreen(
     onGameOver: () -> Unit,
     onPlayAgain: () -> Unit,
     isPaused: Boolean,
+    modifier: Modifier = Modifier
 ) {
+
+    var previousKey by remember { mutableStateOf<Int?>(null) }
+    var previousEngine by remember { mutableStateOf<GameEngine?>(null) }
+    var previousIsPaused by remember { mutableStateOf<Boolean?>(null) }
+
     var engine by remember { mutableStateOf<GameEngine?>(null) }
     val context = LocalContext.current
 
@@ -37,32 +50,44 @@ fun GameScreen(
     var lastHighJumpTime by remember { mutableStateOf(0L) }
 
     Box(
-        Modifier
+        modifier
             .fillMaxSize()
-            .background(Color(0xFFACE4EF))
             .pointerInput(Unit) {
                 detectTapGestures(
                     onPress = {
                         engine?.isHolding = true
-                        engine?.playerFly()
+                        engine?.playerBoost()
                         tryAwaitRelease()
                         engine?.isHolding = false
                     },
-                    onTap = { engine?.playerJump() }
+                    onTap = {
+                        engine?.playerJump()
+                    }
                 )
             }
     ) {
-        // Nút Pause
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp)
-        ) {
-            Button(
-                onClick = { onPause() },
-                modifier = Modifier.align(Alignment.TopEnd)
+        // Background image
+        Image(
+            painter = painterResource(id = R.drawable.sandworld), // đặt ảnh background ở res/drawable
+            contentDescription = null,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop // phủ toàn màn hình
+        )
+
+        if(!isPaused){
+            // Nút Pause
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp)
             ) {
-                Text("Pause")
+                Button(
+                    onClick = onPause,
+                    modifier = Modifier.align(Alignment.TopEnd),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Black.copy(0.8f))
+                ) {
+                    Text("Pause", modifier = Modifier.background(Color.Black.copy(alpha = 0f)))
+                }
             }
         }
 
@@ -71,26 +96,20 @@ fun GameScreen(
 
             engine?.let { eng ->
                 val playerRadius = 30f
-                val paddingTop = size.height * 0.2f // khoảng cách tham chiếu
-                val scaleDuration = 5000L // giữ scale tối đa trong 5s
-                val scaleSpeed = 0.0005f   // tốc độ tăng dần về 1 mỗi frame
+                val paddingTop = size.height * 0.25f
+                val scaleDuration = 5000L
+                val scaleSpeed = 0.0005f
 
-                val playerTop = eng.state.player.y - playerRadius + 50f
+                val playerTop = eng.state.player.y - playerRadius
                 val targetScale = if (playerTop < paddingTop) {
                     (playerTop + 1000f) / (paddingTop + 1000f)
                 } else 1f
 
-                // xử lý khi player nhảy cao
                 if (targetScale < 1f) {
                     lastHighJumpTime = System.currentTimeMillis()
-                    if (scale > targetScale) {
-                        // scale hiện tại lớn hơn targetScale -> giảm xuống targetScale
-                        scale = targetScale
-                    }
-                    // nếu targetScale > scale hiện tại -> giữ scale hiện tại
+                    if (scale > targetScale) scale = targetScale
                 }
 
-                // nếu đã hết 5s kể từ nhảy cao -> tăng dần về 1
                 if (System.currentTimeMillis() - lastHighJumpTime > scaleDuration) {
                     if (scale < 1f) {
                         scale += scaleSpeed
@@ -98,14 +117,12 @@ fun GameScreen(
                     }
                 }
 
-                // áp dụng scale đồng nhất quanh trung tâm màn hình
                 with(drawContext.canvas) {
                     save()
-                    val pivotX = size.width / 2f
                     val pivotY = size.height / 2f
-                    scale(scale, scale, pivotX, pivotY)
+                    scale(scale, scale,eng.state.player.x , pivotY)
 
-                    // vẽ obstacles
+                    // Vẽ obstacles
                     eng.state.obstacles.forEach { obs ->
                         drawRect(
                             color = Color.Black,
@@ -114,14 +131,14 @@ fun GameScreen(
                         )
                     }
 
-                    // vẽ sóng
+                    // Vẽ sóng
                     drawPath(
                         path = Path().apply {
-                            val extendedWidth = size.width / scale + 200f
-                            val extendedHeight = size.height / scale + 200f
+                            val extendedWidth = size.width / scale + 600f
+                            val extendedHeight = size.height / scale + 600f
 
-                            moveTo(-400f, extendedHeight)
-                            var sx = -400f
+                            moveTo(-1000f, extendedHeight)
+                            var sx = -1000f
                             val step = 6f
                             while (sx <= extendedWidth) {
                                 val worldX = sx + eng.waveOffset
@@ -132,10 +149,10 @@ fun GameScreen(
                             lineTo(extendedWidth, extendedHeight)
                             close()
                         },
-                        color = Color(0xFFF1B42E)
+                        color = Color(0xFFDCA32A)
                     )
 
-                    // vẽ player
+                    // Vẽ player
                     drawCircle(
                         color = Color.Black,
                         radius = playerRadius,
@@ -148,25 +165,40 @@ fun GameScreen(
         }
     }
 
-    // Vòng lặp update game
-    LaunchedEffect(engine, isPaused, key) {
-        while (true) {
-            if (!isPaused) {
-                engine?.update()
-                if (engine?.state?.isGameOver  == true) {
-                    onGameOver()
-                    engine?.state?.isGameOver  = false
-                    break
-                }
-            }
-            delay(8) // ~60FPS
+    DisposableEffect(engine, isPaused, key) {
+        val gameThread = engine?.let {
+            GameThread(
+                engine = it,
+                onGameOver = onGameOver,
+                isPausedProvider = { isPaused },
+                onReset = { onPlayAgain() }
+            )
+        }
+
+        // So sánh key
+        if (previousKey != null && previousKey != key) {
+            gameThread?.requestReset()
+        }
+
+        // So sánh engine
+        if (previousEngine != null && previousEngine != engine) {
+            // Nếu muốn: restart game thread
+        }
+
+        // So sánh isPaused
+        if (previousIsPaused != null && previousIsPaused != isPaused) {
+            // Chỉ cần thread đọc isPausedProvider thôi, không reset lại
+        }
+
+        previousKey = key
+        previousEngine = engine
+        previousIsPaused = isPaused
+
+        gameThread?.start()
+
+        onDispose {
+            gameThread?.stopThread()
         }
     }
 
-    // Reset game
-    LaunchedEffect(key) {
-        engine?.reset()
-        delay(20)
-        onPlayAgain()
-    }
 }
