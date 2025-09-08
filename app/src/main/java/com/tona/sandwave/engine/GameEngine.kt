@@ -10,6 +10,7 @@ import kotlin.math.sin
 import kotlin.random.Random
 import android.content.Context
 import android.util.Log
+import androidx.compose.runtime.remember
 
 class GameEngine(val canvasWidth: Float, val canvasHeight: Float, context: Context) {
 
@@ -30,6 +31,9 @@ class GameEngine(val canvasWidth: Float, val canvasHeight: Float, context: Conte
     private val playerRadius = 30f
     private var gravity = 0.4f
     private val jumpVelocity = 15f
+
+    // Hệ số điểm
+    private val pixelsPerPoint = 10f  // tuỳ chỉnh độ nhanh tăng điểm
 
     private var lastTime = System.nanoTime()
 
@@ -92,6 +96,11 @@ class GameEngine(val canvasWidth: Float, val canvasHeight: Float, context: Conte
         // Sóng "chảy" qua người chơi
         waveOffset += obstacleSpeed
 
+        // --- TÍNH ĐIỂM ---
+        // Điểm = tổng quãng đường đã đi (pixel) / pixelsPerPoint
+        val newScore = (waveOffset / pixelsPerPoint).toLong()
+        if (newScore != state.score) state.score = newScore
+
         updatePlayer(deltaTime)
         updateObstacles()
         maybeSpawnObstacle()
@@ -104,6 +113,7 @@ class GameEngine(val canvasWidth: Float, val canvasHeight: Float, context: Conte
         obstacleSpeedNormal = 4f
         obstacleSpeedBoosted = 8f
         obstacleSpeed = 3.5f
+        state.score = 0L
         updatePlayer((System.nanoTime() - lastTime) / 1_000_000_000f)
     }
 

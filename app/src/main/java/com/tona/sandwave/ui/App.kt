@@ -61,7 +61,10 @@ fun App() {
                 contentAlignment = Alignment.Center
             ) {
                 when {
-                    showMenu.value -> MenuScreen(onPlay = { showMenu.value = false })
+                    showMenu.value -> MenuScreen(onPlay = {
+                        showMenu.value = false
+                        showPause.value = false
+                    })
                     showPause.value -> PauseScreen(
                         onContinue = { showPause.value = false },
                         onMenu = {
@@ -73,6 +76,7 @@ fun App() {
                     showGameOver.value -> GameOverScreen(
                         onPlayAgain = {
                             reset += 1
+                            showPause.value = false
                             showGameOver.value = false
                             reset += 1
                         },
