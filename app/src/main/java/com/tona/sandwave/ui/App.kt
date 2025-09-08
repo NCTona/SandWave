@@ -24,6 +24,7 @@ fun App() {
     val showMenu = remember { mutableStateOf(true) }
     val showPause = remember { mutableStateOf(false) }
     val showGameOver = remember { mutableStateOf(false) }
+    var score by remember { mutableStateOf(0L) }
 
     var reset by remember { mutableStateOf(0) }
 
@@ -44,7 +45,10 @@ fun App() {
         GameScreen(
             key = reset,
             onPause = { showPause.value = true },
-            onGameOver = { showGameOver.value = true },
+            onGameOver = {sc ->
+                showGameOver.value = true
+                score = sc
+            },
             onPlayAgain = { showGameOver.value = false },
             isPaused = showPause.value || showMenu.value || showGameOver.value,
             modifier = Modifier
@@ -84,7 +88,8 @@ fun App() {
                             showGameOver.value = false
                             showMenu.value = true
                             reset += 1
-                        }
+                        },
+                        score = score
                     )
                 }
             }

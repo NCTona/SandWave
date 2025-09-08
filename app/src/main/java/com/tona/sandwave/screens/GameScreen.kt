@@ -28,7 +28,7 @@ import com.tona.sandwave.thread.GameThread
 fun GameScreen(
     key: Int,
     onPause: () -> Unit,
-    onGameOver: () -> Unit,
+    onGameOver: (Long) -> Unit,
     onPlayAgain: () -> Unit,
     isPaused: Boolean,
     modifier: Modifier = Modifier
@@ -108,8 +108,7 @@ fun GameScreen(
 
         }
 
-
-        // Game graphics
+        // Game graphic
         GameGraphic(
             engine = engine,
             modifier = Modifier.fillMaxSize()
@@ -120,7 +119,9 @@ fun GameScreen(
     DisposableEffect(engine, isPaused) {
         val gameThread = GameThread(
             engine = engine,
-            onGameOver = onGameOver,
+            onGameOver = {
+                onGameOver(engine.state.score)  // Trả score ra ngoài
+            },
             isPausedProvider = { isPaused },
             onReset = { onPlayAgain() }
         )
@@ -131,4 +132,5 @@ fun GameScreen(
             gameThread.stopThread()
         }
     }
+
 }
