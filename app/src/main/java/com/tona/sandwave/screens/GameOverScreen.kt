@@ -12,7 +12,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 @Composable
-fun GameOverScreen(onPlayAgain: () -> Unit, onMenu: () -> Unit, score: Long) {
+fun GameOverScreen(onPlayAgain: () -> Unit, onMenu: () -> Unit, score: Long, highScore: Long) {
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
@@ -22,6 +22,8 @@ fun GameOverScreen(onPlayAgain: () -> Unit, onMenu: () -> Unit, score: Long) {
             Text("Oops!!!", fontSize = 48.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(8.dp))
 
             Text("Your score: ${score}", fontSize = 28.sp, modifier = Modifier.padding(8.dp))
+
+            Text("Highest score: ${highScore}", fontSize = 28.sp, modifier = Modifier.padding(8.dp))
 
             Button(onClick = onPlayAgain,
                 modifier = Modifier

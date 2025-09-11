@@ -61,13 +61,17 @@ fun GameScreen(
             .pointerInput(engine) { // đảm bảo luôn dùng engine mới
                 detectTapGestures(
                     onPress = {
-                        engine.isHolding = true
-                        engine.playerBoost()
-                        tryAwaitRelease()
-                        engine.isHolding = false
+                        if(!isPaused){
+                            engine.isHolding = true
+                            engine.playerBoost()
+                            tryAwaitRelease()
+                            engine.isHolding = false
+                        }
                     },
                     onTap = {
-                        engine.playerJump()
+                        if(!isPaused){
+                            engine.playerJump()
+                        }
                     }
                 )
             }

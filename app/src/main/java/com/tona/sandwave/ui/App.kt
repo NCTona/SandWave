@@ -16,11 +16,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.tona.sandwave.io.GameIO
 import com.tona.sandwave.screens.*
 
 @Composable
 fun App() {
+
+    val context = LocalContext.current
+
     val showMenu = remember { mutableStateOf(true) }
     val showPause = remember { mutableStateOf(false) }
     val showGameOver = remember { mutableStateOf(false) }
@@ -46,8 +51,9 @@ fun App() {
             key = reset,
             onPause = { showPause.value = true },
             onGameOver = {sc ->
-                showGameOver.value = true
                 score = sc
+                GameIO.saveHighScore(context, score)
+                showGameOver.value = true
             },
             onPlayAgain = { showGameOver.value = false },
             isPaused = showPause.value || showMenu.value || showGameOver.value,
@@ -89,7 +95,8 @@ fun App() {
                             showMenu.value = true
                             reset += 1
                         },
-                        score = score
+                        score = score,
+                        highScore = GameIO.getHighScore(context)
                     )
                 }
             }

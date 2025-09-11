@@ -118,7 +118,7 @@ class GameEngine(val canvasWidth: Float, val canvasHeight: Float, context: Conte
     }
 
     // =========================
-    // WAVE HEIGHT (thế giới): x là worldX (không phải screenX)
+    // WAVE HEIGHT
     // =========================
     private fun waveAt(worldX: Float): Float {
         val x = worldX.toDouble()
@@ -201,7 +201,7 @@ class GameEngine(val canvasWidth: Float, val canvasHeight: Float, context: Conte
         val now = System.currentTimeMillis()
         if (now - lastSpawnTime > nextSpawnDelay) {
             // Chọn vị trí spawn theo toạ độ thế giới rồi quy về toạ độ màn hình
-            val spawnWorldX = waveOffset + canvasWidth + Random.nextInt(300, 600) + 500
+            val spawnWorldX = waveOffset + canvasWidth + Random.nextInt(300, 600) + 2500
             val waveY = waveAt(spawnWorldX)
             val obsHeight = 50f + Random.nextFloat() * 100f
 

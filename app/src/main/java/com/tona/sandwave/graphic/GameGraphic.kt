@@ -52,7 +52,7 @@ fun GameGraphic(
                 drawRect(
                     color = Color.Black,
                     topLeft = Offset(obs.x, obs.y),
-                    size = Size(obs.width, obs.height + 20f)
+                    size = Size(obs.width, obs.height + 100f)
                 )
             }
 
@@ -62,8 +62,8 @@ fun GameGraphic(
                     val extendedWidth = size.width / scale + 600f
                     val extendedHeight = size.height / scale + 600f
 
-                    moveTo(-1000f, extendedHeight)
-                    var sx = -1000f
+                    moveTo(-5000f, extendedHeight)
+                    var sx = -5000f
                     val step = 6f
                     while (sx <= extendedWidth) {
                         val worldX = sx + engine.waveOffset
