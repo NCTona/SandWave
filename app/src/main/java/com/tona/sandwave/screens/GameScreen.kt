@@ -1,7 +1,6 @@
 package com.tona.sandwave.screens
 
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Button
@@ -10,10 +9,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.imageResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
@@ -23,22 +22,18 @@ import com.tona.sandwave.R
 import com.tona.sandwave.engine.GameEngine
 import com.tona.sandwave.graphic.GameGraphic
 import com.tona.sandwave.thread.GameThread
+import kotlinx.coroutines.delay
 
 @Composable
 fun GameScreen(
-    key: Int,
+    engine: GameEngine,
     onPause: () -> Unit,
     onGameOver: (Long) -> Unit,
     onPlayAgain: () -> Unit,
     isPaused: Boolean,
     modifier: Modifier = Modifier
 ) {
-    val context = LocalContext.current
 
-    // Engine được reset lại mỗi khi key thay đổi
-    var engine by remember(key) {
-        mutableStateOf(GameEngine(1920f, 1080f, context))
-    }
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -55,36 +50,60 @@ fun GameScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
+    // ---------------- BACKGROUND ----------------
+    val background = ImageBitmap.imageResource(id = R.drawable.sandwave_background)
+    val backgroundWidth = background.width.toFloat()
+
+    var offsetX by remember { mutableStateOf(0f) }
+
+    // Cập nhật offset liên tục để tạo hiệu ứng cuộn
+    LaunchedEffect(isPaused) {
+        while (true) {
+            if (!isPaused) {
+                offsetX -= engine.obstacleSpeed   // tốc độ chạy
+                if (offsetX <= -backgroundWidth) {
+                    offsetX = 0f
+                }
+            }
+            delay(16) // ~60fps
+        }
+    }
+
     Box(
         modifier
             .fillMaxSize()
-            .pointerInput(engine) { // đảm bảo luôn dùng engine mới
+            .pointerInput(engine, isPaused) {
                 detectTapGestures(
                     onPress = {
-                        if(!isPaused){
+                        if (!isPaused && engine.state.player.isJumping) {
                             engine.isHolding = true
-                            engine.playerBoost()
+                            val startTime = System.nanoTime()
                             tryAwaitRelease()
+                            val holdTime = (System.nanoTime() - startTime) / 1_000_000_000f
+                            engine.playerUlti(holdTime)
+                            engine.isHolding = false
+                        } else if (!isPaused && !engine.state.player.isJumping) {
+                            engine.isHolding = true
+                            tryAwaitRelease()
+                            engine.playerJump()
                             engine.isHolding = false
                         }
                     },
                     onTap = {
-                        if(!isPaused){
+                        if (!isPaused && !engine.isHolding) {
                             engine.playerJump()
                         }
                     }
                 )
             }
     ) {
-        // Background
-        Image(
-            painter = painterResource(id = R.drawable.sandworld),
-            contentDescription = null,
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop
-        )
+        // Vẽ background cuộn
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            drawImage(background, topLeft = Offset(offsetX, 0f))
+            drawImage(background, topLeft = Offset(offsetX + backgroundWidth, 0f))
+        }
 
-        // Pause button
+        // Pause button + Score
         if (!isPaused) {
             Box(
                 modifier = Modifier
@@ -100,7 +119,6 @@ fun GameScreen(
                 }
             }
 
-            // Score
             Text(
                 text = "Score: ${engine.state.score}",
                 fontSize = 20.sp,
@@ -109,7 +127,6 @@ fun GameScreen(
                     .align(Alignment.TopStart)
                     .padding(16.dp)
             )
-
         }
 
         // Game graphic
@@ -119,22 +136,16 @@ fun GameScreen(
         )
     }
 
-    // Game thread
+    // ---------------- GAME THREAD ----------------
     DisposableEffect(engine, isPaused) {
         val gameThread = GameThread(
             engine = engine,
-            onGameOver = {
-                onGameOver(engine.state.score)  // Trả score ra ngoài
-            },
+            onGameOver = { onGameOver(engine.state.score) },
             isPausedProvider = { isPaused },
             onReset = { onPlayAgain() }
         )
 
         gameThread.start()
-
-        onDispose {
-            gameThread.stopThread()
-        }
+        onDispose { gameThread.stopThread() }
     }
-
 }

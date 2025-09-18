@@ -7,12 +7,19 @@ import androidx.compose.runtime.setValue
 class GameState {
     var player = Player()
     var obstacles = mutableListOf<Obstacle>()
+    var fallingObjects = mutableListOf<FallingObject>()
+    val projectiles = mutableListOf<Projectile>()
     var isGameOver by mutableStateOf(false)
+    var isReset by mutableStateOf(false)
+    var isPaused by mutableStateOf(false)
     var score: Long by mutableStateOf(0)   // điểm dựa trên khoảng cách
 
     fun reset() {
         player = Player(x = 360f, y = 0f, velocityY = 0f, isJumping = false)
         obstacles.clear()
+        fallingObjects.clear()
+        projectiles.clear()
+        isReset = false
         isGameOver = false
     }
 }

@@ -11,25 +11,18 @@ class GameThread(
 
     @Volatile
     private var running = true
-    @Volatile
-    private var needReset = false
 
     fun stopThread() {
         running = false
         interrupt() // đảm bảo thoát khỏi sleep
     }
 
-    fun requestReset() {
-        needReset = true
-    }
-
     override fun run() {
         try {
             while (running && !isInterrupted) {
-                if (needReset) {
+                if (engine.state.isReset) {
                     engine.reset()
                     onReset?.invoke()
-                    needReset = false
                 }
 
                 if (!isPausedProvider()) {
@@ -41,7 +34,7 @@ class GameThread(
                         break
                     }
                 }
-                sleep(8) // ~120 FPS
+                sleep(10) // ~120 FPS
             }
         } catch (e: InterruptedException) {
             // Thread bị ngắt -> thoát an toàn
