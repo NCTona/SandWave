@@ -5,6 +5,7 @@ import com.tona.sandwave.engine.GameEngine
 class GameThread(
     private val engine: GameEngine,
     private val onGameOver: () -> Unit,
+    private val onWinGame: () -> Unit,
     private val isPausedProvider: () -> Boolean,
     private val onReset: (() -> Unit)? = null
 ) : Thread() {
@@ -31,6 +32,12 @@ class GameThread(
                     if (engine.state.isGameOver) {
                         onGameOver()
                         engine.state.isGameOver = false
+                        break
+                    }
+
+                    if (engine.state.isGameWin) {
+                        onWinGame()
+                        engine.state.isGameWin = false
                         break
                     }
                 }

@@ -1,6 +1,7 @@
 package com.tona.sandwave
 
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.mutableStateOf
@@ -19,8 +20,12 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Cho phép vẽ full màn hình (tràn ra ngoài status/navigation bar)
-        WindowCompat.setDecorFitsSystemWindows(window, false)
+        // Cho phép layout tràn toàn màn hình, kể cả notch
+        window.apply {
+            WindowCompat.setDecorFitsSystemWindows(this, false)
+            attributes.layoutInDisplayCutoutMode =
+                WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+        }
 
         // Ẩn status bar + navigation bar
         WindowInsetsControllerCompat(window, window.decorView).apply {
@@ -29,13 +34,17 @@ class MainActivity : ComponentActivity() {
                 WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
 
-        engine = GameEngine(1920f, 1080f, this)
+        val displayMetrics = resources.displayMetrics
+        val screenWidth = displayMetrics.widthPixels.toFloat()
+        val screenHeight = displayMetrics.heightPixels.toFloat()
+
+        engine = GameEngine(screenWidth, screenHeight, this)
 
         setContent {
             App(engine, eventAffect)
         }
-
     }
+
 
     override fun onPause() {
         super.onPause()

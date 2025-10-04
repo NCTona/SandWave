@@ -10,6 +10,7 @@ import kotlin.math.sin
 import kotlin.random.Random
 import android.content.Context
 import android.util.Log
+import com.tona.sandwave.audio.MusicPlayer
 import com.tona.sandwave.model.Projectile
 import kotlinx.coroutines.delay
 import java.util.concurrent.ConcurrentLinkedQueue
@@ -18,11 +19,16 @@ class GameEngine(val canvasWidth: Float, val canvasHeight: Float, context: Conte
 
     val state = GameState()
     val sound = Sound(context = context)
+    val musicPlayer = MusicPlayer(context)
+
 
     // offset "kéo" sóng sang trái (mặt đất chuyển động)
     var waveOffset by mutableStateOf(0f)
 
     var isHolding by mutableStateOf(false) // nhấn giữ
+
+    var isHoldingShield by mutableStateOf(false)
+    var shieldExpireTime: Long = 0L
 
     private var obstacleSpeedNormal = 4f
     private var gravityNormal = 0.4f
@@ -48,8 +54,25 @@ class GameEngine(val canvasWidth: Float, val canvasHeight: Float, context: Conte
     private var lastFallingSpawnTime = System.currentTimeMillis()
     private var nextFallingSpawnDelay = Random.nextLong(3000, 6000)
 
+    // item object spawn control
+    private var lastItemSpawnTime = System.currentTimeMillis()
+    private var nextItemSpawnDelay = Random.nextLong(2000, 4000)
+
+    // shield object spawn control
+    private var lastShieldSpawnTime = System.currentTimeMillis()
+    private var nextShieldSpawnDelay = Random.nextLong(5000, 10000)
+
+    // cooldown ulti
+    private var lastUltiTime = 0L
+    private val ultiCooldown = 200L // 2 giây cooldown
+
     // Tổng hợp các vị trí va chạm để UI đọc và tạo shockwave (thread-safe)
     val pendingShockwaves = ConcurrentLinkedQueue<Pair<Float, Float>>() // (x, y)
+
+    var isUlti by mutableStateOf(false)
+    var isHoldingUlti by mutableStateOf(false)
+    var ultiDuration = 1000L // 1 giây
+    var ultiStart = 0L
 
 
     // =========================
@@ -82,10 +105,11 @@ class GameEngine(val canvasWidth: Float, val canvasHeight: Float, context: Conte
     init {
         state.reset()
         updatePlayer((System.nanoTime() - lastTime) / 1_000_000_000f)
+        musicPlayer.play()
     }
 
     fun update() {
-        if (state.isGameOver) return
+        if (state.isGameOver || state.isGameWin) return
 
         Log.d("GameEngine", state.player.isJumping.toString())
 
@@ -99,23 +123,34 @@ class GameEngine(val canvasWidth: Float, val canvasHeight: Float, context: Conte
         if (!isHolding || !state.player.isJumping) obstacleSpeed = obstacleSpeedNormal
         if (!isHolding && !state.player.isJumping) gravity = gravityNormal
 
+        // Timeout cho shield
+        if (isHoldingShield && System.currentTimeMillis() > shieldExpireTime) {
+            isHoldingShield = false
+        }
+
         // Gọi giảm gravity khi đang hold
         playerAccumulate()
 
         // Sóng "chảy" qua người chơi
         waveOffset += obstacleSpeed
+        state.distance = waveOffset / pixelsPerPoint
 
         // --- TÍNH ĐIỂM ---
         // Điểm = tổng quãng đường đã đi (pixel) / pixelsPerPoint
         val newScore = (waveOffset / pixelsPerPoint).toLong()
-        if (newScore != state.score) state.score = newScore
+        state.score = newScore + state.coin * 100
 
         updatePlayer(deltaTime)
         updateObstacles()
+        updateItemObjects()
         updateFallingObjects()  // cập nhật nhiều falling object
+        updateShieldObjects()
         maybeSpawnFallingObject()  // spawn nhiều falling object
+        maybeSpawnItemObject()
+        maybeSpawnShieldObject()
         maybeSpawnObstacle()
         checkCollisions()
+        checkUltiCollisions()
         updateProjectiles()
     }
 
@@ -126,6 +161,8 @@ class GameEngine(val canvasWidth: Float, val canvasHeight: Float, context: Conte
         obstacleSpeedNormal = 4f
         obstacleSpeed = 3.5f
         state.score = 0L
+        state.coin = 0
+        state.distance = 0f
         state.fallingObjects.clear() // xoá tất cả object
         pendingShockwaves.clear()
         updatePlayer((System.nanoTime() - lastTime) / 1_000_000_000f)
@@ -194,13 +231,17 @@ class GameEngine(val canvasWidth: Float, val canvasHeight: Float, context: Conte
     fun playerUlti(holdTime: Float) {
         val player = state.player
         if (!player.isJumping) return
-        val minHold = 0.1f
-        if (holdTime < minHold) return
+
+        val now = System.currentTimeMillis()
+        if (now - lastUltiTime < ultiCooldown) {
+            // Đang cooldown, không bắn ulti
+            return
+        }
 
         val maxPower = 100f
         val power = (holdTime * 100f).coerceAtMost(maxPower)
 
-        if(player.isJumping){
+        if (player.isJumping && power < maxPower) {
             pendingProjectiles.add(
                 Projectile(
                     x = player.x,
@@ -210,6 +251,12 @@ class GameEngine(val canvasWidth: Float, val canvasHeight: Float, context: Conte
                     radius = 24f + power / 1.5f
                 )
             )
+            sound.playFireSound()
+            lastUltiTime = now // reset cooldown
+        } else if (player.isJumping && power == maxPower) {
+            isUlti = true
+            ultiStart = now
+//            sound.playUltiSound()
         }
     }
 
@@ -242,6 +289,7 @@ class GameEngine(val canvasWidth: Float, val canvasHeight: Float, context: Conte
                     proj.y - proj.radius < obs.y + obs.height
                 ) {
                     pendingShockwaves.offer(Pair(proj.x, proj.y))
+                    sound.playShockwaveSound()
                     iterator.remove()
                     obsIterator.remove()
                     hit = true
@@ -259,6 +307,7 @@ class GameEngine(val canvasWidth: Float, val canvasHeight: Float, context: Conte
                 val distance = kotlin.math.sqrt(dx * dx + dy * dy)
                 if (distance < proj.radius + obj.size) {
                     pendingShockwaves.offer(Pair(proj.x, proj.y))
+                    sound.playShockwaveSound()
                     iterator.remove()
                     fallIterator.remove()
                     hit = true
@@ -268,7 +317,9 @@ class GameEngine(val canvasWidth: Float, val canvasHeight: Float, context: Conte
             if (hit) continue
 
             // --- Xoá nếu ra khỏi màn ---
-            if (proj.x > canvasWidth + 2000 || proj.y > canvasHeight + 200 || proj.x < -200) {
+            if (proj.x > canvasWidth / state.scale || proj.y > canvasHeight || proj.x < 0f) {
+                pendingShockwaves.offer(Pair(proj.x, proj.y))
+                sound.playShockwaveSound()
                 iterator.remove()
             }
         }
@@ -333,6 +384,7 @@ class GameEngine(val canvasWidth: Float, val canvasHeight: Float, context: Conte
                 // Va chạm player
                 // đẩy vị trí va chạm (obj.x, obj.y) vào queue để UI vẽ shockwave
                 pendingShockwaves.offer(Pair(obj.x, obj.y))
+                sound.playShockwaveSound()
                 continue
             }
 
@@ -342,6 +394,7 @@ class GameEngine(val canvasWidth: Float, val canvasHeight: Float, context: Conte
             if (obj.y + obj.size >= waveY) {
                 // đẩy vị trí va chạm (obj.x, waveY) vào queue để UI vẽ shockwave
                 pendingShockwaves.offer(Pair(obj.x, waveY))
+                sound.playShockwaveSound()
                 iterator.remove()
                 continue
             }
@@ -369,14 +422,147 @@ class GameEngine(val canvasWidth: Float, val canvasHeight: Float, context: Conte
                         y = spawnY,
 //                        speedX = -(10..14).random().toFloat(), // chéo sang trái
 //                        speedY = (6..8).random().toFloat()  // rơi xuống
-                        speedX = -12f,
-                        speedY = 6f,
+                        speedX = -14f,
+                        speedY = 5f,
                     )
                 )
             }
 
             lastFallingSpawnTime = now
             nextFallingSpawnDelay = Random.nextLong(2500, 5000)
+        }
+    }
+
+    // =========================
+    // Shield Objects: bám mặt sóng
+    // =========================
+    private fun updateShieldObjects() {
+        val iterator = state.shieldObjects.iterator()
+        val player = state.player
+        while (iterator.hasNext()) {
+            val obj = iterator.next()
+
+            // di chuyển sang trái trong toạ độ màn hình
+            obj.x -= obstacleSpeed
+
+            // cập nhật Y theo mặt sóng
+            val worldX = obj.x + waveOffset
+            val waveY = waveAt(worldX)
+            obj.y = waveY - obj.size  // đặt nằm trên mặt sóng (giống obstacle)
+
+            // --- Kiểm tra va chạm với player ---
+            val dx = player.x - obj.x
+            val dy = player.y - obj.y
+            val distance = kotlin.math.sqrt(dx * dx + dy * dy)
+            if (distance < playerRadius + obj.size) {
+                pendingShockwaves.offer(Pair(obj.x, obj.y))
+                isHoldingShield = true
+                shieldExpireTime = System.currentTimeMillis() + 5000L // 5 giây
+                sound.playShockwaveSound()
+                iterator.remove()
+                continue
+            }
+
+            // xoá khi ra khỏi màn
+            if (obj.x + obj.size < -100f) {
+                iterator.remove()
+            }
+        }
+    }
+
+
+
+    private fun maybeSpawnShieldObject() {
+        val now = System.currentTimeMillis()
+        if (now - lastShieldSpawnTime > nextShieldSpawnDelay) {
+            val spawnWorldX = waveOffset + canvasWidth + Random.nextInt(400, 800) * 10
+            val waveY = waveAt(spawnWorldX)
+            val size = 30f + Random.nextFloat() * 20f
+
+            state.shieldObjects.add(
+                com.tona.sandwave.model.ShieldObject(
+                    x = spawnWorldX - waveOffset,
+                    y = waveY - size,
+                    speedX = 0f, // không cần vì mình update bằng obstacleSpeed
+                    speedY = 0f,
+                    size = size
+                )
+            )
+
+            lastShieldSpawnTime = now
+            nextShieldSpawnDelay = Random.nextLong(5000, 10000)
+        }
+    }
+
+
+    // =========================
+    // Item Objects: Bay song song mặt đất
+    // =========================
+    private fun updateItemObjects() {
+        val iterator = state.itemObjects.iterator()
+        val player = state.player
+        val now = System.currentTimeMillis()
+        while (iterator.hasNext()) {
+            val obj = iterator.next()
+
+            // cập nhật vị trí (screen coordinates)
+            obj.x += obj.speedX
+            obj.y += obj.speedY
+
+            // --- Kiểm tra va chạm với player ---
+            val dx = player.x - obj.x
+            val dy = player.y - obj.y
+            val distance = kotlin.math.sqrt(dx * dx + dy * dy)
+            if (distance < playerRadius + obj.size) {
+                // Va chạm player
+                // đẩy vị trí va chạm (obj.x, obj.y) vào queue để UI vẽ shockwave
+                pendingShockwaves.offer(Pair(obj.x, obj.y))
+                sound.playShockwaveSound()
+                continue
+            }
+
+            // tính height của sóng tại vị trí object (dùng worldX = screenX + waveOffset)
+            val waveY = waveAt(obj.x + waveOffset)
+            // chạm sóng: đáy object chạm wave
+            if (obj.y + obj.size >= waveY) {
+                // đẩy vị trí va chạm (obj.x, waveY) vào queue để UI vẽ shockwave
+                pendingShockwaves.offer(Pair(obj.x, waveY))
+                sound.playShockwaveSound()
+                iterator.remove()
+                continue
+            }
+
+            // xoá khi ra khỏi màn hình
+            if (obj.x < -100f || obj.y > canvasHeight + 100f) {
+                iterator.remove()
+            }
+        }
+    }
+
+
+    private fun maybeSpawnItemObject() {
+        val now = System.currentTimeMillis()
+        if (now - lastItemSpawnTime > nextItemSpawnDelay) {
+            // spawn ở góc phải trên (screen coords)
+            val spawnCount = Random.nextInt(0, 5) // spawn 0..5 object cùng lúc
+            repeat(spawnCount) {
+                val spawnX = canvasWidth + 50f + Random.nextFloat() * 10000f
+                val spawnY = canvasHeight / 2
+
+                state.itemObjects.add(
+                    com.tona.sandwave.model.ItemObject(
+                        x = spawnX,
+                        y = spawnY,
+//                        speedX = -(10..14).random().toFloat(), // chéo sang trái
+//                        speedY = (6..8).random().toFloat()  // rơi xuống
+                        speedX = -14f,
+                        speedY = 0f,
+                    )
+                )
+            }
+
+            lastItemSpawnTime = now
+            nextItemSpawnDelay = Random.nextLong(2500, 5000)
         }
     }
 
@@ -391,7 +577,9 @@ class GameEngine(val canvasWidth: Float, val canvasHeight: Float, context: Conte
         val playerRight = player.x + playerRadius
 
         // --- Va chạm obstacles ---
-        state.obstacles.forEach { obs ->
+        val obsIterator = state.obstacles.iterator()
+        while (obsIterator.hasNext()) {
+            val obs = obsIterator.next()
             val obsTop = obs.y
             val obsBottom = obs.y + obs.height
             val obsLeft = obs.x
@@ -402,8 +590,18 @@ class GameEngine(val canvasWidth: Float, val canvasHeight: Float, context: Conte
                 playerBottom > obsTop &&
                 playerTop < obsBottom
             ) {
-                sound.playCrashSound()
-                state.isGameOver = true
+                if (!isHoldingShield) {
+                    // Không có khiên → Game Over
+                    sound.playCrashSound()
+                    state.isGameOver = true
+                } else {
+                    // Có khiên → phá obstacle, tạo shockwave
+                    val hitX = (obsLeft + obsRight) / 2f
+                    val hitY = (obsTop + obsBottom) / 2f
+                    pendingShockwaves.offer(Pair(hitX, hitY))
+                    sound.playShockwaveSound()
+                    obsIterator.remove()
+                }
             }
         }
 
@@ -417,13 +615,85 @@ class GameEngine(val canvasWidth: Float, val canvasHeight: Float, context: Conte
 
             if (distance < playerRadius + obj.size && (!isHolding || state.player.isJumping)) {
                 // Player bị trúng falling object
-                sound.playCrashSound()
-                state.isGameOver = true
-                // Nếu muốn, cũng có thể xóa object khi va chạm
-                // fallIterator.remove()
+                if (!isHoldingShield){
+                    sound.playCrashSound()
+                    state.isGameOver = true
+                } else {
+                     fallIterator.remove()
+                }
             } else if (distance < playerRadius + obj.size && isHolding) {
-                 fallIterator.remove()
+                fallIterator.remove()
             }
+        }
+
+        // --- Va chạm item objects ---
+        val itemIterator = state.itemObjects.iterator()
+        while (itemIterator.hasNext()) {
+            val obj = itemIterator.next()
+            val dx = player.x - obj.x
+            val dy = player.y - obj.y
+            val distance = kotlin.math.sqrt(dx * dx + dy * dy)
+
+            if (distance < playerRadius + obj.size && (!isHolding || state.player.isJumping)) {
+                // Player chạm coin
+                sound.playCollectCoinSound()
+                state.coin += 1
+                if (state.coin >= 2) {
+                    state.isGameWin = true
+                }
+                itemIterator.remove()
+            } else if (distance < playerRadius + obj.size && isHolding) {
+                itemIterator.remove()
+            }
+        }
+    }
+
+    // =========================
+    // Ulti Shockwave Collision
+    // =========================
+    private fun checkUltiCollisions() {
+        if (!isUlti) return
+
+        val elapsed = System.currentTimeMillis() - ultiStart
+        val progress = (elapsed.toFloat() / ultiDuration).coerceIn(0f, 1f)
+        val maxRadius = canvasWidth.coerceAtLeast(canvasHeight) * 1.5f
+        val currentRadius = maxRadius * progress
+
+        val player = state.player
+        val centerX = player.x
+        val centerY = player.y
+
+        // Obstacles
+        val obsIterator = state.obstacles.iterator()
+        while (obsIterator.hasNext()) {
+            val obs = obsIterator.next()
+            val dx = (obs.x + obs.width / 2f) - centerX
+            val dy = (obs.y + obs.height / 2f) - centerY
+            val dist = kotlin.math.sqrt(dx * dx + dy * dy)
+            if (dist < currentRadius) {
+                pendingShockwaves.offer(Pair(obs.x, obs.y))
+                sound.playShockwaveSound()
+                obsIterator.remove()
+            }
+        }
+
+        // Falling objects
+        val fallIterator = state.fallingObjects.iterator()
+        while (fallIterator.hasNext()) {
+            val obj = fallIterator.next()
+            val dx = obj.x - centerX
+            val dy = obj.y - centerY
+            val dist = kotlin.math.sqrt(dx * dx + dy * dy)
+            if (dist < currentRadius) {
+                pendingShockwaves.offer(Pair(obj.x, obj.y))
+                sound.playShockwaveSound()
+                fallIterator.remove()
+            }
+        }
+
+        // Tắt ulti khi hết thời gian
+        if (elapsed > ultiDuration) {
+            isUlti = false
         }
     }
 }

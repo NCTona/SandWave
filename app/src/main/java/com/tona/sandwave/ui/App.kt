@@ -1,6 +1,5 @@
 package com.tona.sandwave.ui
 
-import android.util.Log
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -37,6 +36,8 @@ fun App(
     val showMenu = remember { mutableStateOf(true) }
     val showPause = remember { mutableStateOf(false) }
     val showGameOver = remember { mutableStateOf(false) }
+    val showGameWin = remember { mutableStateOf(false) }
+    val showRankScore = remember { mutableStateOf(false) }
 
     var score by remember { mutableStateOf(0L) }
 
@@ -56,8 +57,8 @@ fun App(
         animationSpec = tween(durationMillis = 500)
     )
 
-    LaunchedEffect(showMenu.value, showPause.value, showGameOver.value) {
-        engine.state.isPaused = showMenu.value || showPause.value || showGameOver.value
+    LaunchedEffect(showMenu.value, showPause.value, showGameOver.value, showGameWin.value, showRankScore.value) {
+        engine.state.isPaused = showMenu.value || showPause.value || showGameOver.value || showGameWin.value || showRankScore.value
     }
 
     LaunchedEffect(eventAffect) {
@@ -77,7 +78,15 @@ fun App(
                 showGameOver.value = true
             },
             engine = engine,
-            onPlayAgain = { showGameOver.value = false },
+            onPlayAgain = {
+                showGameOver.value = false
+                showGameWin.value = false
+            },
+            onWinGame = { sc ->
+                score = sc
+                GameIO.saveHighScore(context, score)
+                showGameWin.value = true
+            },
             isPaused = isPaused,
             modifier = Modifier
                 .fillMaxSize()
@@ -105,6 +114,28 @@ fun App(
                             engine.state.isReset = true
                         }
                     )
+                    showGameWin.value -> WinGameScreen(
+                        onPlayAgain = {
+                            showPause.value = false
+                            showGameWin.value = false
+                            engine.state.isReset = true
+                        },
+                        onMenu = {
+                            showGameWin.value = false
+                            showGameOver.value = false
+                            showMenu.value = true
+                            engine.state.isReset = true
+                        },
+                        onRankScore = {
+                            showGameWin.value = false
+                            showGameOver.value = false
+                            showMenu.value = false
+                            showRankScore.value = true
+                        },
+                        score = score,
+                        coin = engine.state.coin,
+                        distance = engine.state.distance
+                    )
                     showGameOver.value -> GameOverScreen(
                         onPlayAgain = {
 //                            engine.state.isReset = true
@@ -118,7 +149,21 @@ fun App(
                             engine.state.isReset = true
                         },
                         score = score,
-                        highScore = GameIO.getHighScore(context)
+                        coin = engine.state.coin,
+                        distance = engine.state.distance
+                    )
+                    showRankScore.value -> RankScoreScreen(
+                        onPlayAgain = {
+                            showRankScore.value = false
+                            engine.state.isReset = true
+                        },
+                        onMenu = {
+                            showRankScore.value = false
+                            showMenu.value = true
+                            engine.state.isReset = true
+                        },
+                        score = score,
+                        highScores = GameIO.getHighScores(context)
                     )
                 }
             }
