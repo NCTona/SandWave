@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "com.tona.sandwave"
+    namespace = "com.tona.balladventure"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.tona.sandwave"
+        applicationId = "com.tona.balladventure"
         minSdk = 25
         targetSdk = 35
         versionCode = 1
